@@ -70,8 +70,7 @@ def main() -> None:
 
     def _sigint_handler(sig, frame):
         _interrupted[0] = True
-        _out("\n\n⚠️  检测到中断请求，正在安全退出...\n")
-        _out("   提示: 模型加载期间请勿按键，等待 'OK' 出现后再操作。\n")
+        _out("\r❌ 已取消 (模型加载未完成)\n")
 
     signal.signal(signal.SIGINT, _sigint_handler)
 
@@ -79,8 +78,6 @@ def main() -> None:
         engine.initialize()
     except KeyboardInterrupt:
         if _interrupted[0]:
-            _err("\n❌ 用户中断: 模型加载未完成")
-            _err("   请重新运行并等待 15 秒，不要触碰键盘。")
             sys.exit(1)
         raise
     except Exception as e:
