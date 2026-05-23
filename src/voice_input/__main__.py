@@ -36,6 +36,8 @@ def main() -> None:
 
     _real_stdout = sys.stdout
     _real_stderr = sys.stderr
+
+    print("正在启动语音输入法...", file=_real_stdout, end="", flush=True)
     sys.stdout = _NullWriter()
     sys.stderr = _NullWriter()
 
@@ -45,7 +47,7 @@ def main() -> None:
 
     engine = VoiceEngine(config)
 
-    spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    spinner = ["\u231B", "\u2590", "\u258C", "\u2594"]
     si = [0]
     recording = [False]
     ready = [False]
@@ -86,11 +88,13 @@ def main() -> None:
     except Exception as e:
         sys.stdout = _real_stdout
         sys.stderr = _real_stderr
-        print("\u274C 启动失败: %s" % e, file=sys.stderr)
+        print(" \u274C 失败\n" % e, file=_real_stderr)
         sys.exit(1)
 
     sys.stdout = _real_stdout
     sys.stderr = _real_stderr
+
+    print(" OK  (按 F9 开始录音)", file=_real_stdout, flush=True)
 
     engine.start_hotkey()
 
