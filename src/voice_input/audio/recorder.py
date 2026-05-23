@@ -7,12 +7,20 @@ import time
 from collections.abc import Callable
 
 import numpy as np
-import sounddevice as sd
-from scipy.io import wavfile
+import soundfile as sf
 
 from voice_input.config import AudioConfig
 
 logger = logging.getLogger(__name__)
+
+_sd = None
+
+def _get_sd():
+    global _sd
+    if _sd is None:
+        import sounddevice as sd
+        _sd = sd
+    return _sd
 
 
 class AudioRecorder:
@@ -20,7 +28,7 @@ class AudioRecorder:
         self._config = config or AudioConfig()
         self._buffer: list[np.ndarray] = []
         self._is_recording = False
-        self._stream: sd.InputStream | None = None
+        self._stream = None
         self._lock = threading.Lock()
         self._start_time: float = 0
         self._silence_start: float | None = None
@@ -43,7 +51,7 @@ class AudioRecorder:
             self._start_time = time.time()
             self._silence_start = None
 
-        self._stream = sd.InputStream(
+        self._stream = _get_sd().InputStream(
             samplerate=self._config.sample_rate,
             channels=self._config.channels,
             dtype=self._config.dtype,
@@ -86,7 +94,7 @@ class AudioRecorder:
         return 0.0
 
     def list_devices(self) -> list[dict]:
-        devices = sd.query_devices()
+        devices = _get_sd().query_devices()
         result = []
         for i, dev in enumerate(devices):
             if dev["max_input_channels"] > 0:
@@ -137,5 +145,5 @@ class AudioRecorder:
         audio = np.concatenate(self._buffer, axis=0)
 
         buf = io.BytesIO()
-        wavfile.write(buf, self._config.sample_rate, audio)
+        sf.write(buf, audio, self._config.sample_rate, format='WAV', subtype='PCM_16')
         return buf.getvalue()
