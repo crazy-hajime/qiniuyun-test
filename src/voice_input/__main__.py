@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import signal
 import sys
 import time
 
@@ -13,11 +14,6 @@ if __name__ == "__main__":
 
 from voice_input.config import load_config
 from voice_input.engine import EngineState, VoiceEngine
-
-
-class _NullWriter:
-    def write(self, *a, **k): pass
-    def flush(self): pass
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -34,7 +30,7 @@ def main() -> None:
     parser.add_argument("--config", "-c", default=None, help="配置文件路径")
     parser.add_argument("--verbose", "-v", action="store_true", help="显示详细日志")
     parser.add_argument("--no-gui", action="store_true", help="无GUI模式")
-    parser.add_argument("--backend", "-b", default=None, help="ASR后端 (funasr/sherpa/cloud)")
+    parser.add_argument("--backend", "-b", default=None, help="ASR后端")
     parser.add_argument("--device", "-d", type=int, default=None, help="GPU设备ID")
     args = parser.parse_args()
     setup_logging(args.verbose)
@@ -46,6 +42,10 @@ def main() -> None:
         _real_stderr.write(msg + "\n")
         _real_stderr.flush()
 
+    def _out(msg):
+        _real_stdout.write(msg)
+        _real_stdout.flush()
+
     print("正在启动语音输入法...", end="", flush=True)
 
     config = None
@@ -56,7 +56,6 @@ def main() -> None:
         if args.backend:
             config.asr.backend = args.backend
         engine = VoiceEngine(config)
-        engine.initialize()
     except Exception as e:
         import traceback
         _err("\n❌ 启动失败:")
@@ -64,7 +63,36 @@ def main() -> None:
         traceback.print_exc(file=_real_stderr)
         sys.exit(1)
 
-    print(" OK  (按 F9 开始录音)", flush=True)
+    print(f"\r  ⏳ 加载模型中 (约需10-20秒，请耐心等待)...", flush=True)
+
+    _interrupted = [False]
+    _orig_sigint = signal.getsignal(signal.SIGINT)
+
+    def _sigint_handler(sig, frame):
+        _interrupted[0] = True
+        _out("\n\n⚠️  检测到中断请求，正在安全退出...\n")
+        _out("   提示: 模型加载期间请勿按键，等待 'OK' 出现后再操作。\n")
+
+    signal.signal(signal.SIGINT, _sigint_handler)
+
+    try:
+        engine.initialize()
+    except KeyboardInterrupt:
+        if _interrupted[0]:
+            _err("\n❌ 用户中断: 模型加载未完成")
+            _err("   请重新运行并等待 15 秒，不要触碰键盘。")
+            sys.exit(1)
+        raise
+    except Exception as e:
+        import traceback
+        _err("\n❌ 模型加载失败:")
+        _err(str(e))
+        traceback.print_exc(file=_real_stderr)
+        sys.exit(1)
+    finally:
+        signal.signal(signal.SIGINT, _orig_sigint)
+
+    _out("\r✅ 启动完成!  (按 F9 开始录音, Ctrl+C 退出)\n")
 
     spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     si = [0]
@@ -74,10 +102,9 @@ def main() -> None:
         if recording[0]:
             s = spinner[si[0] % len(spinner)]
             si[0] += 1
-            _real_stdout.write(f"\r  🎤 {s} 录音中 ...   ")
+            _out(f"\r  🎤 {s} 录音中 ...   ")
         else:
-            _real_stdout.write("\r" + " " * 30 + "\r")
-        _real_stdout.flush()
+            _out("\r" + " " * 35 + "\r")
 
     def on_status(state):
         recording[0] = state == EngineState.RECORDING
@@ -86,8 +113,7 @@ def main() -> None:
     def on_result(text):
         recording[0] = False
         _write_status()
-        _real_stdout.write(text + "\n")
-        _real_stdout.flush()
+        _out(text + "\n")
 
     def on_error(msg):
         _write_status()
@@ -108,8 +134,7 @@ def main() -> None:
             _write_status()
             time.sleep(0.08)
     except KeyboardInterrupt:
-        _real_stdout.write("\n已退出。\n")
-        _real_stdout.flush()
+        _out("\n已退出。\n")
     finally:
         engine.stop_hotkey()
 
