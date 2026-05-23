@@ -1,0 +1,51 @@
+app:
+  name: "语音输入法"
+  version: "0.1.0"
+
+audio:
+  sample_rate: 16000
+  channels: 1
+  block_size: 1024
+  dtype: "int16"
+  silence_threshold: 0.01
+  silence_duration: 1.5
+  max_duration: 60
+
+asr:
+  backend: "funasr"
+  funasr:
+    model: "d:/qiniuyun/voice-models/SenseVoiceSmall"
+    quantize: true
+    hotwords_file: "hotwords.txt"
+    enable_punctuation: true
+    language: "zh"
+  sherpa:
+    model_dir: ""
+    language: "auto"
+    provider: "cpu"
+  cloud:
+    provider: ""
+    api_key: ""
+    endpoint: ""
+
+text:
+  strip_trailing_punctuation: true
+  merge_single_letters: true
+  enable_traditional_chinese: false
+  enable_hotwords: true
+  hotwords_file: "hotwords.txt"
+
+output:
+  mode: "both"
+  clipboard_delay: 0.1
+  typing_delay: 0.02
+
+hotkey:
+  ptt_key: "f9"
+  toggle_key: "alt_r"
+  mode: "ptt"
+
+gui:
+  show_tray: true
+  show_indicator: true
+  indicator_opacity: 0.8

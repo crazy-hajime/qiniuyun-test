@@ -1,0 +1,27 @@
+# 语音输入法热词文件
+# 格式说明：
+#   - 每行一个热词，用于提升识别准确率
+#   - 纠错规则格式: 错误词 -> 正确词
+#
+# 示例热词
+ChatGPT
+Claude
+Python
+JavaScript
+TypeScript
+PyTorch
+TensorFlow
+FunASR
+ONNX
+API
+SDK
+GitHub
+VSCode
+Windows
+macOS
+Linux
+
+# 纠错规则示例
+拆的皮提 -> ChatGPT
+克劳德 -> Claude
+派森 -> Python
