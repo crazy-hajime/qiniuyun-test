@@ -6,6 +6,11 @@ import os
 import sys
 import time
 
+if __name__ == "__main__":
+    _src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _src_dir not in sys.path:
+        sys.path.insert(0, os.path.dirname(_src_dir))
+
 from voice_input.config import load_config
 from voice_input.engine import EngineState, VoiceEngine
 
@@ -25,40 +30,51 @@ def setup_logging(verbose: bool = False) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", "-c", default=None)
-    parser.add_argument("--verbose", "-v", action="store_true")
-    parser.add_argument("--no-gui", action="store_true")
-    parser.add_argument("--backend", "-b", default=None)
-    parser.add_argument("--device", "-d", type=int, default=None)
+    parser = argparse.ArgumentParser(description="语音输入法 - 按F9开始录音")
+    parser.add_argument("--config", "-c", default=None, help="配置文件路径")
+    parser.add_argument("--verbose", "-v", action="store_true", help="显示详细日志")
+    parser.add_argument("--no-gui", action="store_true", help="无GUI模式")
+    parser.add_argument("--backend", "-b", default=None, help="ASR后端 (funasr/sherpa/cloud)")
+    parser.add_argument("--device", "-d", type=int, default=None, help="GPU设备ID")
     args = parser.parse_args()
     setup_logging(args.verbose)
 
     _real_stdout = sys.stdout
     _real_stderr = sys.stderr
 
-    print("正在启动语音输入法...", file=_real_stdout, end="", flush=True)
-    sys.stdout = _NullWriter()
-    sys.stderr = _NullWriter()
+    def _err(msg):
+        _real_stderr.write(msg + "\n")
+        _real_stderr.flush()
 
-    config = load_config(args.config)
-    if args.backend:
-        config.asr.backend = args.backend
+    print("正在启动语音输入法...", end="", flush=True)
 
-    engine = VoiceEngine(config)
+    config = None
+    engine = None
 
-    spinner = ["\u231B", "\u2590", "\u258C", "\u2594"]
+    try:
+        config = load_config(args.config)
+        if args.backend:
+            config.asr.backend = args.backend
+        engine = VoiceEngine(config)
+        engine.initialize()
+    except Exception as e:
+        import traceback
+        _err("\n❌ 启动失败:")
+        _err(str(e))
+        traceback.print_exc(file=_real_stderr)
+        sys.exit(1)
+
+    print(" OK  (按 F9 开始录音)", flush=True)
+
+    spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     si = [0]
     recording = [False]
-    ready = [False]
 
     def _write_status():
-        if not ready[0]:
-            return
         if recording[0]:
             s = spinner[si[0] % len(spinner)]
             si[0] += 1
-            _real_stdout.write("\r  \U0001F3A4 %s 录音中 ...   " % s)
+            _real_stdout.write(f"\r  🎤 {s} 录音中 ...   ")
         else:
             _real_stdout.write("\r" + " " * 30 + "\r")
         _real_stdout.flush()
@@ -68,42 +84,32 @@ def main() -> None:
         _write_status()
 
     def on_result(text):
-        _write_status()
         recording[0] = False
-        _real_stdout.write("%s\n" % text)
+        _write_status()
+        _real_stdout.write(text + "\n")
         _real_stdout.flush()
 
     def on_error(msg):
         _write_status()
-        _real_stderr.write("\u274C %s\n" % msg)
-        _real_stderr.flush()
+        _err("❌ " + msg)
 
     engine.set_on_status_change(on_status)
     engine.set_on_result(on_result)
     engine.set_on_error(on_error)
 
     try:
-        engine.initialize()
-        ready[0] = True
+        engine.start_hotkey()
     except Exception as e:
-        sys.stdout = _real_stdout
-        sys.stderr = _real_stderr
-        print(" \u274C 失败\n" % e, file=_real_stderr)
+        _err("❌ 热键启动失败: " + str(e))
         sys.exit(1)
-
-    sys.stdout = _real_stdout
-    sys.stderr = _real_stderr
-
-    print(" OK  (按 F9 开始录音)", file=_real_stdout, flush=True)
-
-    engine.start_hotkey()
 
     try:
         while True:
             _write_status()
             time.sleep(0.08)
     except KeyboardInterrupt:
-        pass
+        _real_stdout.write("\n已退出。\n")
+        _real_stdout.flush()
     finally:
         engine.stop_hotkey()
 
