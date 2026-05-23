@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voice-input-method"
+version = "0.1.0"
+description = "语音输入法 - 提高文本输入效率的语音识别工具"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "VoiceInput Team"}
+]
+keywords = ["voice", "input-method", "asr", "speech-recognition"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+dependencies = [
+    "numpy>=1.24.0",
+    "sounddevice>=0.4.6",
+    "scipy>=1.10.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.0.0",
+    "pyperclip>=1.8.2",
+]
+
+[project.optional-dependencies]
+funasr = [
+    "funasr>=1.0.0",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+    "modelscope>=1.0.0",
+    "soundfile>=0.12.0",
+]
+sherpa = [
+    "sherpa-onnx>=1.9.0",
+]
+hotkey = [
+    "pynput>=1.7.6",
+]
+gui = [
+    "PyQt6>=6.5.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+]
+all = [
+    "voice-input-method[funasr,sherpa,hotkey,gui]",
+]
+
+[project.scripts]
+voice-input = "voice_input.__main__:main"
+voice-input-cli = "voice_input.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
