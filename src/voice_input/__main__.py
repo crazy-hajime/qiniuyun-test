@@ -89,24 +89,20 @@ def main() -> None:
 
     signal.signal(signal.SIGINT, _sigint_handler)
 
-    _orig_stdout = sys.stdout
-    sys.stdout = open(os.devnull, "w", encoding="utf-8")
-
     try:
         engine.initialize()
     except KeyboardInterrupt:
         if _interrupted[0]:
+            _out("\r❌ 已取消\n")
             sys.exit(1)
         raise
     except Exception as e:
         import traceback
-        _err("\n❌ 模型加载失败:")
+        _out("\r❌ 模型加载失败\n")
         _err(str(e))
         traceback.print_exc(file=_real_stderr)
         sys.exit(1)
     finally:
-        sys.stdout.close()
-        sys.stdout = _orig_stdout
         signal.signal(signal.SIGINT, _orig_sigint)
 
     _out(f"\r✅ 启动完成!{feature_str}  (按 F9 开始录音, Ctrl+C 退出)\n")
