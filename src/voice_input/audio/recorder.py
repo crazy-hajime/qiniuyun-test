@@ -84,6 +84,12 @@ class AudioRecorder:
     def get_audio_data(self) -> bytes:
         return self._get_wav_bytes()
 
+    def get_audio_size(self) -> int:
+        if not self._buffer:
+            return 0
+        audio = np.concatenate(self._buffer, axis=0)
+        return audio.nbytes
+
     def get_duration(self) -> float:
         if not self._is_recording and self._start_time == 0:
             return 0.0

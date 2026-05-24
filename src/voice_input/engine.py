@@ -56,8 +56,8 @@ class VoiceEngine:
         self._stream_lock = threading.Lock()
         self._model_lock = threading.Lock()
         self._last_partial_text = ""
-        self._last_stream_bytes = 0
-        self._min_stream_audio_ms = 500
+        self._last_pcm_bytes = 0
+        self._min_stream_audio_ms = 800
         self._stream_future = None
 
         self._recorder.set_on_silence(self._on_silence_detected)
@@ -101,7 +101,7 @@ class VoiceEngine:
             return
 
         self._last_partial_text = ""
-        self._last_stream_bytes = 0
+        self._last_pcm_bytes = 0
         self._set_state(EngineState.RECORDING)
         self._recorder.start_recording()
 
@@ -190,22 +190,33 @@ class VoiceEngine:
             if self._state != EngineState.RECORDING:
                 return
 
-            full_audio = self._recorder.get_audio_data()
-            if not full_audio or len(full_audio) <= self._last_stream_bytes:
+            full_wav = self._recorder.get_audio_data()
+            pcm_size = self._recorder.get_audio_size()
+
+            if not full_wav or pcm_size <= self._last_pcm_bytes:
                 return
 
-            new_bytes = len(full_audio) - self._last_stream_bytes
+            new_pcm_bytes = pcm_size - self._last_pcm_bytes
             sample_rate = self._config.audio.sample_rate
             bytes_per_ms = (sample_rate * 2)
             min_bytes = int(self._min_stream_audio_ms * bytes_per_ms)
 
-            if new_bytes < min_bytes:
+            if new_pcm_bytes < min_bytes:
                 return
 
-            chunk = full_audio[self._last_stream_bytes:]
-            self._last_stream_bytes = len(full_audio)
+            wav_header_size = 44
+            new_pcm = full_wav[wav_header_size + self._last_pcm_bytes : wav_header_size + pcm_size]
 
-            self._stream_future = _executor.submit(self._sync_recognize, chunk)
+            import struct
+
+            header = bytearray(full_wav[:wav_header_size])
+            struct.pack_into("<I", header, 4, len(new_pcm) + 36)
+            struct.pack_into("<I", header, 40, len(new_pcm))
+            chunk_wav = bytes(header) + new_pcm
+
+            self._last_pcm_bytes = pcm_size
+
+            self._stream_future = _executor.submit(self._sync_recognize, chunk_wav)
             try:
                 partial_text = self._stream_future.result(timeout=8)
             except concurrent.futures.TimeoutError:
