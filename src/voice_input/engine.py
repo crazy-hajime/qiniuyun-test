@@ -205,9 +205,7 @@ class VoiceEngine:
                 return
 
             new_pcm_bytes = pcm_size - self._last_pcm_bytes
-            sample_rate = self._config.audio.sample_rate
-            bytes_per_ms = (sample_rate * 2)
-            min_bytes = int(self._min_stream_audio_ms * bytes_per_ms)
+            min_bytes = int(self._min_stream_audio_ms * self._config.audio.sample_rate * 2 / 1000)
 
             if new_pcm_bytes < min_bytes:
                 return
