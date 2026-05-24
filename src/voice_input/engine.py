@@ -91,8 +91,16 @@ class VoiceEngine:
 
     def initialize(self) -> None:
         logger.info(f"Initializing voice engine with backend: {self._config.asr.backend}")
-        self._asr = create_asr_backend(self._config.asr.backend, self._config.asr)
-        self._asr.load_model()
+        import sys
+        import os
+        _real_stderr = sys.stderr
+        sys.stderr = open(os.devnull, "w")
+        try:
+            self._asr = create_asr_backend(self._config.asr.backend, self._config.asr)
+            self._asr.load_model()
+        finally:
+            sys.stderr.close()
+            sys.stderr = _real_stderr
         logger.info("Voice engine initialized")
 
     def start_recording(self) -> None:

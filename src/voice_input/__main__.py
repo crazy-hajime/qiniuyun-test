@@ -114,9 +114,12 @@ def main() -> None:
 
     def _write_status():
         if recording[0]:
-            s = spinner[si[0] % len(spinner)]
-            si[0] += 1
-            _out(f"\r  🎤 {s} 录音中 ...   ")
+            if partial_shown[0]:
+                pass
+            else:
+                s = spinner[si[0] % len(spinner)]
+                si[0] += 1
+                _out(f"\r  🎤 {s} 录音中 ...   ")
         else:
             _out("\r" + " " * 35 + "\r")
 
