@@ -52,6 +52,8 @@ class VoiceEngine:
         self._stream_timer: threading.Timer | None = None
         self._stream_lock = threading.Lock()
         self._last_partial_text = ""
+        self._last_stream_bytes = 0
+        self._min_stream_audio_ms = 500
 
         self._recorder.set_on_silence(self._on_silence_detected)
 
@@ -86,7 +88,6 @@ class VoiceEngine:
         logger.info(f"Initializing voice engine with backend: {self._config.asr.backend}")
         self._asr = create_asr_backend(self._config.asr.backend, self._config.asr)
         self._asr.load_model()
-        self._polisher = AIPolisher(self._config.polish)
         logger.info("Voice engine initialized")
 
     def start_recording(self) -> None:
@@ -95,6 +96,7 @@ class VoiceEngine:
             return
 
         self._last_partial_text = ""
+        self._last_stream_bytes = 0
         self._set_state(EngineState.RECORDING)
         self._recorder.start_recording()
 
@@ -176,11 +178,22 @@ class VoiceEngine:
             if self._state != EngineState.RECORDING:
                 return
 
-            audio_data = self._recorder.get_audio_data()
-            if not audio_data:
+            full_audio = self._recorder.get_audio_data()
+            if not full_audio or len(full_audio) <= self._last_stream_bytes:
                 return
 
-            partial_text = asyncio.run(self._async_recognize(audio_data))
+            new_bytes = len(full_audio) - self._last_stream_bytes
+            sample_rate = self._config.audio.sample_rate
+            bytes_per_ms = (sample_rate * 2)
+            min_bytes = int(self._min_stream_audio_ms * bytes_per_ms)
+
+            if new_bytes < min_bytes:
+                return
+
+            chunk = full_audio[self._last_stream_bytes:]
+            self._last_stream_bytes = len(full_audio)
+
+            partial_text = asyncio.run(self._async_recognize(chunk))
 
             if partial_text and partial_text != self._last_partial_text:
                 self._last_partial_text = partial_text
