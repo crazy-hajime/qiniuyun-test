@@ -83,6 +83,35 @@ class GUIConfig:
 
 
 @dataclass
+class OllamaConfig:
+    model: str = "qwen2.5:0.5b"
+    host: str = "http://localhost:11434"
+
+
+@dataclass
+class OpenAIConfig:
+    model: str = "gpt-3.5-turbo"
+    api_key: str = ""
+    base_url: str = "https://api.openai.com/v1"
+
+
+@dataclass
+class PolishConfig:
+    enabled: bool = False
+    backend: str = "ollama"
+    ollama: OllamaConfig = field(default_factory=OllamaConfig)
+    openai: OpenAIConfig = field(default_factory=OpenAIConfig)
+    style: str = "auto"
+
+
+@dataclass
+class StreamingConfig:
+    enabled: bool = True
+    interval: float = 1.0
+    show_partial: bool = True
+
+
+@dataclass
 class AppConfig:
     audio: AudioConfig = field(default_factory=AudioConfig)
     asr: ASRConfig = field(default_factory=ASRConfig)
@@ -90,6 +119,8 @@ class AppConfig:
     output: OutputConfig = field(default_factory=OutputConfig)
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
     gui: GUIConfig = field(default_factory=GUIConfig)
+    polish: PolishConfig = field(default_factory=PolishConfig)
+    streaming: StreamingConfig = field(default_factory=StreamingConfig)
 
 
 def _deep_update(base: dict, override: dict) -> dict:

@@ -32,6 +32,9 @@ def main() -> None:
     parser.add_argument("--no-gui", action="store_true", help="无GUI模式")
     parser.add_argument("--backend", "-b", default=None, help="ASR后端")
     parser.add_argument("--device", "-d", type=int, default=None, help="GPU设备ID")
+    parser.add_argument("--no-stream", action="store_true", help="关闭流式识别")
+    parser.add_argument("--polish", action="store_true", help="开启AI润色")
+    parser.add_argument("--style", default=None, choices=["auto", "formal", "casual", "technical"], help="润色风格")
     args = parser.parse_args()
     setup_logging(args.verbose)
 
@@ -55,6 +58,12 @@ def main() -> None:
         config = load_config(args.config)
         if args.backend:
             config.asr.backend = args.backend
+        if args.no_stream:
+            config.streaming.enabled = False
+        if args.polish:
+            config.polish.enabled = True
+        if args.style:
+            config.polish.style = args.style
         engine = VoiceEngine(config)
     except Exception as e:
         import traceback
@@ -63,6 +72,13 @@ def main() -> None:
         traceback.print_exc(file=_real_stderr)
         sys.exit(1)
 
+    features = []
+    if config.streaming.enabled:
+        features.append("流式识别")
+    if config.polish.enabled:
+        features.append(f"AI润色({config.polish.style})")
+    feature_str = (" | " + " · ".join(features)) if features else ""
+
     print(f"\r  ⏳ 加载模型中 (约需10-20秒，请耐心等待)...", flush=True)
 
     _interrupted = [False]
@@ -70,7 +86,6 @@ def main() -> None:
 
     def _sigint_handler(sig, frame):
         _interrupted[0] = True
-        _out("\r❌ 已取消 (模型加载未完成)\n")
 
     signal.signal(signal.SIGINT, _sigint_handler)
 
@@ -89,11 +104,12 @@ def main() -> None:
     finally:
         signal.signal(signal.SIGINT, _orig_sigint)
 
-    _out("\r✅ 启动完成!  (按 F9 开始录音, Ctrl+C 退出)\n")
+    _out(f"\r✅ 启动完成!{feature_str}  (按 F9 开始录音, Ctrl+C 退出)\n")
 
     spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     si = [0]
     recording = [False]
+    partial_shown = [False]
 
     def _write_status():
         if recording[0]:
@@ -105,19 +121,36 @@ def main() -> None:
 
     def on_status(state):
         recording[0] = state == EngineState.RECORDING
+        if state == EngineState.PROCESSING:
+            partial_shown[0] = False
         _write_status()
+
+    def on_partial(text):
+        recording[0] = True
+        partial_shown[0] = True
+        _out(f"\r  🎤 ⠿ {text}   ")
 
     def on_result(text):
         recording[0] = False
-        _write_status()
-        _out(text + "\n")
+        if partial_shown[0]:
+            _out(f"\r  ✅ {text}\n")
+        else:
+            _write_status()
+            _out(text + "\n")
+        partial_shown[0] = False
+
+    def on_polished(text):
+        _out(f"  ✨ {text}\n")
 
     def on_error(msg):
         _write_status()
         _err("❌ " + msg)
+        partial_shown[0] = False
 
     engine.set_on_status_change(on_status)
+    engine.set_on_partial(on_partial)
     engine.set_on_result(on_result)
+    engine.set_on_polished(on_polished)
     engine.set_on_error(on_error)
 
     try:

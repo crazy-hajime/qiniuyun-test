@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Callable
 from enum import Enum, auto
 
@@ -13,6 +14,7 @@ from voice_input.config import AppConfig
 from voice_input.hotkey.listener import HotkeyListener
 from voice_input.output.clipboard import ClipboardOutput
 from voice_input.output.typer import KeyboardTyper
+from voice_input.text.polisher import AIPolisher
 from voice_input.text.processor import TextProcessor
 
 logger = logging.getLogger(__name__)
@@ -33,14 +35,23 @@ class VoiceEngine:
         self._asr: ASRBase | None = None
         self._vad = VoiceActivityDetector(self._config.audio)
         self._text_processor = TextProcessor(self._config.text)
+        self._polisher = AIPolisher(self._config.polish)
         self._hotkey_listener = HotkeyListener(self._config.hotkey)
 
         self._clipboard_output = ClipboardOutput(self._config.output)
         self._keyboard_typer = KeyboardTyper(self._config.output)
 
         self._on_status_change: Callable[[EngineState], None] | None = None
+        self._on_partial: Callable[[str], None] | None = None
         self._on_result: Callable[[str], None] | None = None
+        self._on_polished: Callable[[str], None] | None = None
         self._on_error: Callable[[str], None] | None = None
+
+        self._streaming_enabled = self._config.streaming.enabled
+        self._stream_interval = self._config.streaming.interval
+        self._stream_timer: threading.Timer | None = None
+        self._stream_lock = threading.Lock()
+        self._last_partial_text = ""
 
         self._recorder.set_on_silence(self._on_silence_detected)
 
@@ -55,16 +66,27 @@ class VoiceEngine:
     def set_on_status_change(self, callback: Callable[[EngineState], None]) -> None:
         self._on_status_change = callback
 
+    def set_on_partial(self, callback: Callable[[str], None]) -> None:
+        self._on_partial = callback
+
     def set_on_result(self, callback: Callable[[str], None]) -> None:
         self._on_result = callback
 
+    def set_on_polished(self, callback: Callable[[str], None]) -> None:
+        self._on_polished = callback
+
     def set_on_error(self, callback: Callable[[str], None]) -> None:
         self._on_error = callback
+
+    @property
+    def polisher(self) -> AIPolisher:
+        return self._polisher
 
     def initialize(self) -> None:
         logger.info(f"Initializing voice engine with backend: {self._config.asr.backend}")
         self._asr = create_asr_backend(self._config.asr.backend, self._config.asr)
         self._asr.load_model()
+        self._polisher = AIPolisher(self._config.polish)
         logger.info("Voice engine initialized")
 
     def start_recording(self) -> None:
@@ -72,14 +94,20 @@ class VoiceEngine:
             logger.warning(f"Cannot start recording in state: {self._state}")
             return
 
+        self._last_partial_text = ""
         self._set_state(EngineState.RECORDING)
         self._recorder.start_recording()
+
+        if self._streaming_enabled:
+            self._schedule_partial_transcribe()
+
         logger.info("Recording started")
 
     def stop_and_recognize(self) -> None:
         if self._state != EngineState.RECORDING:
             return
 
+        self._cancel_stream_timer()
         self._set_state(EngineState.PROCESSING)
         audio_data = self._recorder.stop_recording()
 
@@ -125,18 +153,69 @@ class VoiceEngine:
         if self._on_status_change:
             self._on_status_change(state)
 
+    def _schedule_partial_transcribe(self) -> None:
+        if self._state != EngineState.RECORDING:
+            return
+        self._stream_timer = threading.Timer(
+            self._stream_interval, self._do_partial_transcribe
+        )
+        self._stream_timer.daemon = True
+        self._stream_timer.start()
+
+    def _cancel_stream_timer(self) -> None:
+        if self._stream_timer:
+            self._stream_timer.cancel()
+            self._stream_timer = None
+
+    def _do_partial_transcribe(self) -> None:
+        if not self._stream_lock.acquire(blocking=False):
+            self._schedule_partial_transcribe()
+            return
+
+        try:
+            if self._state != EngineState.RECORDING:
+                return
+
+            audio_data = self._recorder.get_audio_data()
+            if not audio_data:
+                return
+
+            partial_text = asyncio.run(self._async_recognize(audio_data))
+
+            if partial_text and partial_text != self._last_partial_text:
+                self._last_partial_text = partial_text
+                processed = self._text_processor.process(partial_text)
+                if processed and self._on_partial:
+                    self._on_partial(processed)
+        except Exception as e:
+            logger.debug(f"Partial transcribe error: {e}")
+        finally:
+            self._stream_lock.release()
+            self._schedule_partial_transcribe()
+
     def _process_audio(self, audio_data: bytes) -> None:
         try:
             result_text = asyncio.run(self._async_recognize(audio_data))
             processed = self._text_processor.process(result_text)
 
-            if processed:
-                self._output_text(processed)
-                if self._on_result:
-                    self._on_result(processed)
-                logger.info(f"Recognition result: {processed}")
-            else:
+            if not processed:
                 logger.info("No speech detected")
+                self._set_state(EngineState.IDLE)
+                return
+
+            final_text = processed
+
+            if self._polisher.enabled:
+                polished = asyncio.run(self._polisher.polish(processed))
+                if polished and polished != processed:
+                    final_text = polished
+                    if self._on_polished:
+                        self._on_polished(polished)
+
+            self._output_text(final_text)
+            if self._on_result:
+                self._on_result(final_text)
+            logger.info(f"Recognition result: {final_text}")
 
         except Exception as e:
             error_msg = f"Recognition failed: {e}"
@@ -160,3 +239,4 @@ class VoiceEngine:
             self._keyboard_typer.output(text)
         elif mode == "both":
             self._clipboard_output.output(text)
+            self._keyboard_typer.output(text)

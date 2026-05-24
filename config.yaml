@@ -49,3 +49,20 @@ gui:
   show_tray: true
   show_indicator: true
   indicator_opacity: 0.8
+
+polish:
+  enabled: false
+  backend: "ollama"
+  ollama:
+    model: "qwen2.5:0.5b"
+    host: "http://localhost:11434"
+  openai:
+    model: "gpt-3.5-turbo"
+    api_key: ""
+    base_url: "https://api.openai.com/v1"
+  style: "auto"
+
+streaming:
+  enabled: true
+  interval: 1.0
+  show_partial: true

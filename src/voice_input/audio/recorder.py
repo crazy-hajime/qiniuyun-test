@@ -82,8 +82,6 @@ class AudioRecorder:
         return self._is_recording
 
     def get_audio_data(self) -> bytes:
-        if self._is_recording:
-            return b""
         return self._get_wav_bytes()
 
     def get_duration(self) -> float:
