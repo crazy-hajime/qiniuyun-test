@@ -54,9 +54,11 @@ class VoiceEngine:
         self._stream_interval = self._config.streaming.interval
         self._stream_timer: threading.Timer | None = None
         self._stream_lock = threading.Lock()
+        self._model_lock = threading.Lock()
         self._last_partial_text = ""
         self._last_stream_bytes = 0
         self._min_stream_audio_ms = 500
+        self._stream_future = None
 
         self._recorder.set_on_silence(self._on_silence_detected)
 
@@ -114,6 +116,13 @@ class VoiceEngine:
 
         self._cancel_stream_timer()
         self._set_state(EngineState.PROCESSING)
+
+        if self._stream_future and not self._stream_future.done():
+            try:
+                self._stream_future.result(timeout=5)
+            except Exception:
+                pass
+
         audio_data = self._recorder.stop_recording()
 
         if not audio_data:
@@ -196,8 +205,11 @@ class VoiceEngine:
             chunk = full_audio[self._last_stream_bytes:]
             self._last_stream_bytes = len(full_audio)
 
-            future = _executor.submit(self._sync_recognize, chunk)
-            partial_text = future.result(timeout=10)
+            self._stream_future = _executor.submit(self._sync_recognize, chunk)
+            try:
+                partial_text = self._stream_future.result(timeout=8)
+            except concurrent.futures.TimeoutError:
+                return
 
             if partial_text and partial_text != self._last_partial_text:
                 self._last_partial_text = partial_text
@@ -208,22 +220,24 @@ class VoiceEngine:
             logger.debug(f"Partial transcribe error: {e}")
         finally:
             self._stream_lock.release()
-            self._schedule_partial_transcribe()
+            if self._state == EngineState.RECORDING:
+                self._schedule_partial_transcribe()
 
     def _sync_recognize(self, audio_data: bytes) -> str:
         if not self._asr:
             return ""
-        try:
-            loop = asyncio.new_event_loop()
+        with self._model_lock:
             try:
-                return loop.run_until_complete(
-                    self._asr.transcribe(audio_data, self._config.audio.sample_rate)
-                )
-            finally:
-                loop.close()
-        except Exception as e:
-            logger.debug(f"Sync recognize error: {e}")
-            return ""
+                loop = asyncio.new_event_loop()
+                try:
+                    return loop.run_until_complete(
+                        self._asr.transcribe(audio_data, self._config.audio.sample_rate)
+                    )
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.debug(f"Sync recognize error: {e}")
+                return ""
 
     def _process_audio(self, audio_data: bytes) -> None:
         try:
@@ -276,4 +290,3 @@ class VoiceEngine:
             self._keyboard_typer.output(text)
         elif mode == "both":
             self._clipboard_output.output(text)
-            self._keyboard_typer.output(text)

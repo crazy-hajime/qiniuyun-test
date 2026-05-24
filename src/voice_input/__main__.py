@@ -89,6 +89,9 @@ def main() -> None:
 
     signal.signal(signal.SIGINT, _sigint_handler)
 
+    _orig_stdout = sys.stdout
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+
     try:
         engine.initialize()
     except KeyboardInterrupt:
@@ -102,6 +105,8 @@ def main() -> None:
         traceback.print_exc(file=_real_stderr)
         sys.exit(1)
     finally:
+        sys.stdout.close()
+        sys.stdout = _orig_stdout
         signal.signal(signal.SIGINT, _orig_sigint)
 
     _out(f"\r✅ 启动完成!{feature_str}  (按 F9 开始录音, Ctrl+C 退出)\n")
