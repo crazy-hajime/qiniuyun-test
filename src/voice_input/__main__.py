@@ -119,7 +119,7 @@ def main() -> None:
             else:
                 s = spinner[si[0] % len(spinner)]
                 si[0] += 1
-                _out(f"\r  🎤 {s} 录音中 ...   ")
+                _out(f"\r  🎤 {s} ...   ")
         else:
             _out("\r" + " " * 35 + "\r")
 
@@ -132,12 +132,12 @@ def main() -> None:
     def on_partial(text):
         recording[0] = True
         partial_shown[0] = True
-        _out(f"\r  🎤 ⠿ {text}   ")
+        _out(f"\r  🎤 {text}   ")
 
     def on_result(text):
         recording[0] = False
         if partial_shown[0]:
-            _out(f"\r  ✅ {text}\n")
+            _out(f"\r{text}\n")
         else:
             _write_status()
             _out(text + "\n")

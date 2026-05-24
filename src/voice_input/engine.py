@@ -93,13 +93,17 @@ class VoiceEngine:
         logger.info(f"Initializing voice engine with backend: {self._config.asr.backend}")
         import sys
         import os
+        _real_stdout = sys.stdout
         _real_stderr = sys.stderr
+        sys.stdout = open(os.devnull, "w")
         sys.stderr = open(os.devnull, "w")
         try:
             self._asr = create_asr_backend(self._config.asr.backend, self._config.asr)
             self._asr.load_model()
         finally:
+            sys.stdout.close()
             sys.stderr.close()
+            sys.stdout = _real_stdout
             sys.stderr = _real_stderr
         logger.info("Voice engine initialized")
 
