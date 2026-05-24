@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import threading
 from collections.abc import Callable
@@ -18,6 +19,8 @@ from voice_input.text.polisher import AIPolisher
 from voice_input.text.processor import TextProcessor
 
 logger = logging.getLogger(__name__)
+
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 
 class EngineState(Enum):
@@ -193,7 +196,8 @@ class VoiceEngine:
             chunk = full_audio[self._last_stream_bytes:]
             self._last_stream_bytes = len(full_audio)
 
-            partial_text = asyncio.run(self._async_recognize(chunk))
+            future = _executor.submit(self._sync_recognize, chunk)
+            partial_text = future.result(timeout=10)
 
             if partial_text and partial_text != self._last_partial_text:
                 self._last_partial_text = partial_text
@@ -206,9 +210,25 @@ class VoiceEngine:
             self._stream_lock.release()
             self._schedule_partial_transcribe()
 
+    def _sync_recognize(self, audio_data: bytes) -> str:
+        if not self._asr:
+            return ""
+        try:
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(
+                    self._asr.transcribe(audio_data, self._config.audio.sample_rate)
+                )
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.debug(f"Sync recognize error: {e}")
+            return ""
+
     def _process_audio(self, audio_data: bytes) -> None:
         try:
-            result_text = asyncio.run(self._async_recognize(audio_data))
+            future = _executor.submit(self._sync_recognize, audio_data)
+            result_text = future.result(timeout=30)
             processed = self._text_processor.process(result_text)
 
             if not processed:
@@ -219,7 +239,11 @@ class VoiceEngine:
             final_text = processed
 
             if self._polisher.enabled:
-                polished = asyncio.run(self._polisher.polish(processed))
+                loop = asyncio.new_event_loop()
+                try:
+                    polished = loop.run_until_complete(self._polisher.polish(processed))
+                finally:
+                    loop.close()
                 if polished and polished != processed:
                     final_text = polished
                     if self._on_polished:

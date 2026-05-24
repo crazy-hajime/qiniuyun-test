@@ -10,7 +10,6 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import numpy as np
-from scipy.io import wavfile
 
 from voice_input.asr.base import ASRBase
 from voice_input.config import ASRConfig
@@ -208,8 +207,10 @@ class FunASRBackend(ASRBase):
 
     def _parse_audio(self, audio_data: bytes, sample_rate: int) -> np.ndarray:
         try:
+            import soundfile as sf
+
             buf = io.BytesIO(audio_data)
-            sr, data = wavfile.read(buf)
+            data, sr = sf.read(buf, dtype="int16")
 
             if data.ndim > 1:
                 data = data[:, 0]
@@ -218,7 +219,7 @@ class FunASRBackend(ASRBase):
                 logger.warning(f"Sample rate {sr} != 16000, resampling may be needed")
 
             return data.astype(np.float32) / 32768.0
-        except ValueError:
+        except Exception:
             data = np.frombuffer(audio_data, dtype=np.int16)
             if data.ndim > 1:
                 data = data[:, 0]
