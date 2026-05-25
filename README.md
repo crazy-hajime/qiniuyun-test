@@ -8,6 +8,8 @@
 
 ## 效果演示
 
+[📺 B站演示视频](https://b23.tv/7TyDeiD)
+
 ```
 PS D:\qiniuyun\qiniuyun-test> python -m voice_input
   加载模型中......
