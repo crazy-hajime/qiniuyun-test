@@ -5,6 +5,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 
 if __name__ == "__main__":
@@ -79,7 +80,7 @@ def main() -> None:
         features.append(f"AI润色({config.polish.style})")
     feature_str = (" | " + " · ".join(features)) if features else ""
 
-    print(f"\r  ⏳ 加载模型中 (约需10-20秒，请耐心等待)...", flush=True)
+    print(f"\r  ⏳ 加载模型中 (约需5-10秒，请耐心等待)...", flush=True)
 
     _interrupted = [False]
     _orig_sigint = signal.getsignal(signal.SIGINT)

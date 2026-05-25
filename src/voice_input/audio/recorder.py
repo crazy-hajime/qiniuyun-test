@@ -10,6 +10,7 @@ import numpy as np
 import soundfile as sf
 
 from voice_input.config import AudioConfig
+from voice_input.audio.noise_reducer import NoiseReducer
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,9 @@ class AudioRecorder:
         self._silence_start: float | None = None
         self._on_silence_callback: Callable[[], None] | None = None
         self._on_level_callback: Callable[[float], None] | None = None
+        self._noise_reducer: NoiseReducer | None = None
+        if self._config.enable_noise_reduction:
+            self._noise_reducer = NoiseReducer(self._config)
 
     def set_on_silence(self, callback: Callable[[], None]) -> None:
         self._on_silence_callback = callback
@@ -122,6 +126,12 @@ class AudioRecorder:
             self._buffer.append(indata.copy())
 
         elapsed = time.time() - self._start_time
+
+        if self._noise_reducer and not self._noise_reducer._profile_collected:
+            level = float(np.abs(indata).mean())
+            if level < self._config.silence_threshold * 3:
+                self._noise_reducer.collect_noise_sample(indata)
+
         if elapsed > self._config.max_duration:
             logger.info("Max duration reached, stopping")
             if self._on_silence_callback:
@@ -147,6 +157,9 @@ class AudioRecorder:
             return b""
 
         audio = np.concatenate(self._buffer, axis=0)
+
+        if self._noise_reducer and self._noise_reducer._profile_collected:
+            audio = self._noise_reducer.process(audio)
 
         buf = io.BytesIO()
         sf.write(buf, audio, self._config.sample_rate, format='WAV', subtype='PCM_16')

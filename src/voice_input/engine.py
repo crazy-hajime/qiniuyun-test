@@ -23,6 +23,29 @@ logger = logging.getLogger(__name__)
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 
+class _SilentStream:
+    def write(self, *args, **kwargs):
+        return 0
+
+    def flush(self):
+        pass
+
+    def isatty(self):
+        return False
+
+    def fileno(self):
+        return -1
+
+    def readable(self):
+        return False
+
+    def writable(self):
+        return True
+
+    def seekable(self):
+        return False
+
+
 class EngineState(Enum):
     IDLE = auto()
     RECORDING = auto()
@@ -57,7 +80,7 @@ class VoiceEngine:
         self._model_lock = threading.Lock()
         self._last_partial_text = ""
         self._last_pcm_bytes = 0
-        self._min_stream_audio_ms = 800
+        self._min_stream_audio_ms = 500
         self._stream_future = None
 
         self._recorder.set_on_silence(self._on_silence_detected)
@@ -91,20 +114,8 @@ class VoiceEngine:
 
     def initialize(self) -> None:
         logger.info(f"Initializing voice engine with backend: {self._config.asr.backend}")
-        import sys
-        import os
-        _real_stdout = sys.stdout
-        _real_stderr = sys.stderr
-        sys.stdout = open(os.devnull, "w")
-        sys.stderr = open(os.devnull, "w")
-        try:
-            self._asr = create_asr_backend(self._config.asr.backend, self._config.asr)
-            self._asr.load_model()
-        finally:
-            sys.stdout.close()
-            sys.stderr.close()
-            sys.stdout = _real_stdout
-            sys.stderr = _real_stderr
+        self._asr = create_asr_backend(self._config.asr.backend, self._config.asr)
+        self._asr.load_model()
         logger.info("Voice engine initialized")
 
     def start_recording(self) -> None:

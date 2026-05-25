@@ -10,6 +10,8 @@ audio:
   silence_threshold: 0.01
   silence_duration: 1.5
   max_duration: 60
+  enable_noise_reduction: true
+  noise_profile_frames: 8
 
 asr:
   backend: "funasr"
@@ -64,5 +66,5 @@ polish:
 
 streaming:
   enabled: true
-  interval: 1.0
+  interval: 0.5
   show_partial: true

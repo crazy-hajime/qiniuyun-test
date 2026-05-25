@@ -67,17 +67,7 @@ class FunASRBackend(ASRBase):
                 disable_update=True,
             )
 
-            if self._config.enable_punctuation:
-                try:
-                    punc_path = self._resolve_model_path(
-                        "iic/punc_ct-transformer_zh-cn-common-vocab272727"
-                    )
-                    self._punc_model = AutoModel(
-                        model=punc_path,
-                        disable_update=True,
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to load punctuation model: {e}")
+            self._punc_pending = self._config.enable_punctuation
 
             self._loaded = True
             logger.info("FunASR model loaded successfully")
@@ -187,6 +177,19 @@ class FunASRBackend(ASRBase):
                 text = str(item)
 
         text = self._clean_sensevoice_tags(text)
+
+        if self._punc_pending and self._punc_model is None:
+            self._punc_pending = False
+            try:
+                punc_path = self._resolve_model_path(
+                    "iic/punc_ct-transformer_zh-cn-common-vocab272727"
+                )
+                self._punc_model = AutoModel(
+                    model=punc_path,
+                    disable_update=True,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to load punctuation model: {e}")
 
         if self._punc_model and text:
             try:

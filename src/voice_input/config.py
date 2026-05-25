@@ -19,6 +19,8 @@ class AudioConfig:
     silence_threshold: float = 0.01
     silence_duration: float = 1.5
     max_duration: int = 60
+    enable_noise_reduction: bool = True
+    noise_profile_frames: int = 8
 
 
 @dataclass
@@ -107,7 +109,7 @@ class PolishConfig:
 @dataclass
 class StreamingConfig:
     enabled: bool = True
-    interval: float = 1.0
+    interval: float = 0.5
     show_partial: bool = True
 
 
