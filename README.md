@@ -1,4 +1,4 @@
-# 🎙️ 语音输入法 (Voice Input Method)
+# 语音输入法 (Voice Input Method)
 
 > 按住热键说话，松开自动识别并输入文字 — 离线、快速、精准的中文语音输入工具
 
@@ -6,30 +6,29 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/Platform-Windows-blue)
 
-## ✨ 效果演示
+## 效果演示
 
 ```
-PS D:\qiniuyun\qiniuyun-test> python -m voice_input --no-gui
-正在启动语音输入法...funasr version: 1.3.1.
-  ⏳ 加载模型中 (约需10-20秒，请耐心等待)...
-✅ 启动完成!  (按 F9 开始录音, Ctrl+C 退出)
-  🎤 ⠹ 录音中 ...
-喂喂喂，能听到吗
-hello world
-5号5号
+PS D:\qiniuyun\qiniuyun-test> python -m voice_input
+  加载模型中......
+funasr version: 1.3.1.
+启动完成! | 流式识别  (按 F9 开始录音, Ctrl+C 退出)
+  录音中...
+  流式识别能听到吗
+→ 流式识别能听到吗
 ```
 
-按住 **F9** 说话 → 松开自动识别 → 文字直接输入到光标位置
+按住 **F9** 说话 → 实时显示识别文字 → 松开自动输入到光标位置
 
-## 🚀 快速开始
+## 快速开始
 
 ### 环境要求
 
-- **Python 3.10+**（推荐 3.12）
+- **Python 3.10+**（推荐 3.12+）
 - **Windows 10/11**
-- **GPU**（可选，CPU 也可运行但较慢）
+- **NVIDIA GPU**（可选，CPU 也可运行）
 
-### 一键安装
+### 安装
 
 ```bash
 # 克隆项目
@@ -40,27 +39,32 @@ cd qiniuyun-test
 python -m venv .venv
 .venv\Scripts\activate
 
-# 安装依赖（FunASR 后端 + 热键支持）
-pip install -e ".[funasr,hotkey]"
-
-# 安装键盘模拟（用于自动打字输出）
-pip install keyboard soundfile
+# 安装依赖
+pip install funasr torch torchaudio
+pip install pynput keyboard soundfile sounddevice numpy pyyaml pyperclip scipy
 
 # 首次运行：下载模型（约 900MB）
-python -m voice_input --no-gui -v
+python -m voice_input -v
 ```
 
-### 启动方式（二选一）
+### 启动
 
-**方式 1：模块方式（推荐）**
 ```bash
-cd d:\qiniuyun\qiniuyun-test
-python -m voice_input --no-gui
+python -m voice_input
 ```
 
-**方式 2：直接运行文件**
+### GPU 加速（可选）
+
+默认使用 CPU 推理，安装 CUDA 版 PyTorch 可启用 GPU 加速：
+
 ```bash
-d:\qiniuyun\.venv\Scripts\python.exe d:\qiniuyun\qiniuyun-test\src\voice_input\__main__.py --no-gui
+# 卸载 CPU 版本，安装 CUDA 版本（约 2.6GB）
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126 --force-reinstall
+```
+
+启动后如果检测到 GPU，会自动显示：
+```
+启动完成! | 流式识别 | GPU (NVIDIA RTX 3050, 4GB)  (按 F9 开始录音, Ctrl+C 退出)
 ```
 
 ### 使用方式
@@ -72,233 +76,196 @@ d:\qiniuyun\.venv\Scripts\python.exe d:\qiniuyun\qiniuyun-test\src\voice_input\_
 | **Alt+R** | 切换长录音模式（Toggle 模式） |
 | **Ctrl+C** | 安全退出程序 |
 
-识别结果会同时：**① 自动打字到光标处 ② 复制到剪贴板**
+识别结果会同时：**自动打字到光标处 + 复制到剪贴板**
 
-### 启动流程说明
+### 命令行参数
 
+```bash
+python -m voice_input [选项]
+
+选项:
+  --config, -c     配置文件路径
+  --verbose, -v    显示详细日志
+  --no-gui         无GUI模式
+  --backend, -b    ASR后端 (funasr/sherpa/cloud)
+  --device, -d     GPU设备ID (0=自动检测)
+  --no-stream      关闭流式识别
+  --polish         开启AI润色
+  --style          润色风格 (auto/formal/casual/technical)
 ```
-T=0s    正在启动语音输入法...funasr version: 1.3.1.
-T=1s    ⏳ 加载模型中 (约需10-20秒，请耐心等待)...   ← 等待中，不要按键
-T=15s   ✅ 启动完成!  (按 F9 开始录音, Ctrl+C 退出)    ← 可以使用了
-```
 
-> ⚠️ **重要**: 模型加载期间（显示 ⏳ 时）请勿触碰键盘或鼠标，否则可能触发中断。
-
-## 🏗️ 技术栈
+## 技术栈
 
 ### 核心框架
 
-| 技术 | 用途 | 版本 |
-|------|------|------|
-| **FunASR** | 语音识别引擎（SenseVoiceSmall） | ≥1.0.0 |
-| **PyTorch** | FunASR 的推理后端 | ≥2.0.0 |
-| **pynput** | 全局热键监听 | ≥1.7.6 |
-| **keyboard** | 键盘模拟打字 | ≥0.13.5 |
-| **soundfile** | WAV 音频文件写入 | ≥0.12.0 |
-| **sounddevice** | 麦克风录音（延迟导入） | ≥0.4.6 |
-| **numpy** | 音频数据处理 | ≥1.24.0 |
-| **PyYAML** | 配置文件解析 | ≥6.0 |
-| **pydantic** | 数据校验 | ≥2.0.0 |
-
-### 性能优化
-
-| 优化项 | 方案 | 效果 |
-|--------|------|------|
-| ASR 后端导入 | 延迟导入 (lazy import) | 60s → 0.12s |
-| 音频设备初始化 | sounddevice 延迟到录音时加载 | 5-30s → 0ms |
-| WAV 写入 | scipy → soundfile | 10-60s → <1ms |
-| **总启动时间** | **以上优化叠加** | **∞(卡死) → ~15s** |
+| 技术 | 用途 |
+|------|------|
+| **FunASR / SenseVoiceSmall** | 语音识别引擎，支持中英日韩粤 |
+| **PyTorch** | 推理后端，支持 CPU/CUDA |
+| **pynput** | 全局热键监听 |
+| **keyboard** | 键盘模拟打字 |
+| **sounddevice** | 麦克风录音 |
+| **soundfile** | WAV 音频读写 |
+| **scipy** | 降噪信号处理 (STFT/ISTFT) |
+| **numpy** | 音频数据处理 |
+| **PyYAML** | 配置文件解析 |
 
 ### 架构设计
 
 ```
 src/voice_input/
-├── __main__.py          # 入口，简洁终端UI + 友好错误提示
+├── __main__.py          # 入口，终端UI + 事件循环
 ├── engine.py            # 核心状态机引擎 (IDLE→RECORDING→PROCESSING)
-├── config.py            # 配置管理 (YAML + Pydantic Dataclass)
-├── protocols.py         # 接口协议定义 (ASRBase, ASRResult)
+├── config.py            # 配置管理 (YAML + Dataclass)
+├── protocols.py         # 接口协议定义
 │
-├── asr/                 # ASR 语音识别层（可插拔后端，延迟导入）
-│   ├── __init__.py      # 延迟导入工厂，按需加载后端 ⭐
+├── asr/                 # ASR 语音识别层（可插拔后端）
 │   ├── base.py          # 抽象基类
 │   ├── funasr_backend.py # FunASR/SenseVoice 后端 (默认)
 │   ├── sherpa_backend.py # sherpa-onnx 后端
 │   └── cloud_backend.py  # 云端API后端（预留）
 │
 ├── audio/               # 音频处理层
-│   ├── recorder.py      # 麦克风录音 (sounddevice 延迟导入)
-│   └── vad.py           # 语音活动检测 (VAD)
+│   ├── recorder.py      # 麦克风录音 + 增量音频获取
+│   ├── vad.py           # 语音活动检测 (能量VAD + sherpa-onnx VAD)
+│   └── noise_reducer.py # 频谱减法降噪
 │
 ├── hotkey/              # 热键监听层
-│   └── listener.py      # PTT/Toggle 热键 (pynput, 防重复触发)
+│   └── listener.py      # PTT/Toggle 热键 (pynput/keyboard)
 │
 ├── output/              # 输出层
-│   ├── clipboard.py     # 剪贴板输出 (pyperclip)
-│   └── typer.py         # 键盘打字输出 (keyboard)
+│   ├── clipboard.py     # 剪贴板输出 (pyperclip + Ctrl+V)
+│   └── typer.py         # 键盘打字输出
 │
 ├── text/                # 文本后处理
 │   ├── processor.py     # 文本清理/规范化
+│   ├── polisher.py      # AI润色 (Ollama/OpenAI)
 │   └── hotwords.py      # 热词管理 & 纠正
 │
 └── gui/                 # GUI 层（预留）
-    └── tray.py          # 系统托盘 (PyQt6)
+    └── tray.py          # 系统托盘
 ```
 
-### 设计模式
+## 功能特性
 
-- **协议驱动**：`ASRBase` 抽象基类，后端可插拔切换
-- **延迟导入**：ASR 后端和 sounddevice 按需加载，优化启动速度
-- **状态机引擎**：`IDLE → RECORDING → PROCESSING` 三态流转
-- **信号处理**：自定义 SIGINT 处理器，友好处理 Ctrl/C 中断
-- **配置驱动**：`config.yaml` 统一管理所有参数
+- **离线语音识别** — 无需联网，本地模型推理
+- **流式识别** — 录音时实时显示识别文字，松开即输出
+- **AI 文本润色** — 支持 Ollama/OpenAI 后端，多种风格
+- **GPU 加速** — 自动检测 CUDA，支持指定 GPU 设备
+- **智能降噪** — 频谱减法降噪，自动采集噪声样本
+- **VAD 静音裁剪** — 录音后自动裁剪静音段，减少无效推理
+- **多语言支持** — 中文/英文/日文/韩文/粤语
+- **智能标点** — 自动添加标点符号
+- **热词纠错** — 自定义热词映射表 (`hotwords.txt`)
+- **双通道输出** — 剪贴板 + 键盘打字同时输出
+- **中文路径兼容** — 自动处理含中文的 Windows 用户名路径
 
-## 📋 功能特性
-
-- ✅ **离线语音识别** — 无需联网，本地模型推理
-- ✅ **多语言支持** — 中文/英文/日文/韩文/粤语（SenseVoice）
-- ✅ **智能标点** — SenseVoice 自带逆文本规范化（数字→中文）
-- ✅ **热词纠错** — 支持自定义热词映射表 (`hotwords.txt`)
-- ✅ **双通道输出** — 剪贴板 + 键盘打字同时输出
-- ✅ **PTT 按键对讲** — 按住说话，松开识别
-- ✅ **快速启动** — ~15秒启动（含模型加载），无冗余日志
-- ✅ **友好错误提示** — 分步异常捕获，清晰的错误信息
-- ✅ **中文路径兼容** — 自动处理含中文的 Windows 用户名路径
-
-## ⚙️ 配置说明
+## 配置说明
 
 编辑 `config.yaml` 自定义行为：
 
 ```yaml
+audio:
+  sample_rate: 16000
+  silence_duration: 3.0       # 静音自动停止时间 (秒)
+  max_duration: 60            # 最长录音时长 (秒)
+  enable_noise_reduction: true # 开启降噪
+
 asr:
-  backend: "funasr"           # 后端: funasr / sherpa / cloud
+  backend: "funasr"
   funasr:
-    model: "d:/path/to/model"  # 本地模型路径 (SenseVoiceSmall)
-    language: "zh"             # 语言: zh / en / ja / ko / auto
-    enable_punctuation: true    # 自动添加标点
+    model: "d:/path/to/SenseVoiceSmall"  # 本地模型路径
+    language: "zh"           # 语言: zh / en / ja / ko / auto
+    device: "auto"           # auto / cpu / cuda:0
+    enable_punctuation: true  # 自动添加标点
 
 hotkey:
-  ptt_key: "f9"                # 录音热键 (F9)
-  toggle_key: "alt_r"           # 切换模式热键 (Alt+R)
-  mode: "ptt"                  # ptt(按住说) / toggle(切换)
+  ptt_key: "f9"              # 录音热键
+  toggle_key: "alt_r"        # 切换模式热键
+  mode: "ptt"                # ptt(按住说) / toggle(切换)
 
 output:
-  mode: "both"                 # both / clipboard / typing
-  typing_delay: 0.02            # 打字间隔 (秒)
+  mode: "both"               # both / clipboard / typing
 
-audio:
-  sample_rate: 16000           # 采样率
-  silence_duration: 1.5         # 静音检测阈值 (秒)
-  max_duration: 60             # 最长录音时长 (秒)
+streaming:
+  enabled: true              # 开启流式识别
+  interval: 0.3              # 流式更新间隔 (秒)
+
+polish:
+  enabled: false             # 开启AI润色
+  backend: "ollama"          # ollama / openai
+  style: "auto"              # auto / formal / casual / technical
+  ollama:
+    model: "qwen2.5:0.5b"
+    host: "http://localhost:11434"
 ```
 
-## 🔧 故障排除
+## 开发过程与问题解决
 
-### 常见问题
-
-#### Q1: 启动后卡在 "正在启动..." 无响应
-
-**原因**: FunASR 模型正在加载 (~893MB)，需要 10-20 秒。
-
-**解决**: 
-- 耐心等待 `✅ 启动完成!` 出现
-- 加载期间**不要触碰键盘**
-- 如果超过 30 秒仍未完成，用 `-v` 参数查看详细日志：
-  ```bash
-  python -m voice_input --no-gui -v
-  ```
-
-#### Q2: 按 F9 没有反应
-
-**检查清单**:
-1. 确认看到 `✅ 启动完成!` 提示
-2. 尝试其他键位（如 F8）：修改 `config.yaml` 的 `ptt_key`
-3. 以管理员身份运行终端
-
-#### Q3: 报错 "KeyboardInterrupt"
-
-**原因**: 模型加载期间按了 Ctrl/C 或触碰键盘。
-
-**解决**: 重新运行并等待 15 秒不要操作。
-
-#### Q4: 识别结果为空或不准确
-
-**解决**:
-- 确保麦克风权限已开启
-- 调整 `silence_duration` 参数（默认 1.5 秒太短会截断语音）
-- 检查 `language` 设置是否匹配你的语言
-
-#### Q5: 中文路径报错 (sentencepiece)
-
-**症状**: `OSError: Not found: ...罗欣...bpe.model`
-
-**原因**: Windows 用户名含中文，sentencepiece 不支持非 ASCII 路径。
-
-**解决**: 已自动处理 — 模型会被复制到 `%TEMP%\voice-input-models\` 目录。
-
-#### Q6: GitHub 推送失败 (443 超时)
-
-**原因**: 国内网络访问 GitHub 不稳定。
-
-**解决**:
-- 配置代理：`git config --global http.proxy http://127.0.0.1:7890`
-- 或使用 SSH 方式：`git remote set-url origin git@github.com:user/repo.git`
-
-## 🔧 开发
-
-```bash
-# 安装开发依赖
-pip install -e ".[dev]"
-
-# 运行测试
-pytest tests/
-
-# 代码格式化
-ruff check src/
-
-# 诊断测试（逐步排查启动问题）
-python test_step.py
-```
-
-## 📖 开发过程与问题解决
-
-详见 [pr和commit.md](./pr和commit.md) — 完整记录了三天开发周期中的每个阶段、遇到的问题及解决方案。
-
-## � 版本历史
-
-### v0.1.0 (2026-05-23)
-
-**Day 1 — 项目骨架搭建**
+### Day 1 — 项目骨架搭建
 - 初始化项目结构、配置体系、状态机引擎
 - 实现音频录制 (VAD)、全局热键 (PTT/Toggle)、双通道输出
 
-**Day 2 — ASR 语音识别集成**
+### Day 2 — ASR 语音识别集成
 - 集成 sherpa-onnx 后端（初始方案）
 - 切换至 FunASR 后端（最终方案，兼容性更好）
 - 修复热键重复触发、配置加载嵌套问题
 
-**Day 3 — 体验优化与工程化**
+### Day 3 — 体验优化与工程化
 - 极简终端输出（隐藏噪音日志）
 - 中文路径兼容性修复
 - 完善 README 与开发文档
 
-**Bug Fix — 启动卡顿修复 (#1 PR)**
-- 修复启动无限等待问题（~60s → ~15s）
-- 延迟导入 ASR 后端、sounddevice、scipy→soundfile
-- 友好处理 KeyboardInterrupt
+### Day 4 — 流式识别与AI润色
+- 实现流式识别：录音时实时显示识别文字
+- 集成 AI 润色模块：支持 Ollama 和 OpenAI 后端
+- 多种润色风格：正式、随意、技术、自动
 
-**Bug Fix — KeyboardInterrupt 友好处理**
-- 添加模型加载进度提示
-- 自定义 SIGINT 信号处理器
-- 区分用户中断 vs 真正错误
+### Day 5 — 性能优化与GPU加速
+- 流式识别延迟优化：1.0s → 0.3s 间隔
+- 标点模型懒加载：启动时只加载主模型
+- 频谱减法降噪：自动采集噪声样本，STFT 频域处理
+- GPU 加速支持：自动检测 CUDA，配置设备参数
+- VAD 静音裁剪：录音后自动裁剪静音段，减少无效推理
+- 流式识别内存优化：增量音频获取，避免重复拼接和编码
+- 静音检测阈值优化：1.5s → 3.0s，避免说话停顿误触
 
-## �📄 License
+### 关键问题解决
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| 启动无限等待 | sounddevice/scipy 提前导入 | 延迟导入，按需加载 |
+| WAV 写入卡死 | scipy.io.wavfile 不支持 BytesIO | 改用 soundfile |
+| 中文路径报错 | sentencepiece 不支持非 ASCII | 自动复制到临时目录 |
+| 流式识别内存爆 | 每次全量拼接+降噪+WAV编码 | 增量PCM获取+手动WAV头构建 |
+| 录音突然停止 | 静音检测1.5s太短 | 调整为3.0s |
+| 文本输出到错误窗口 | keyboard.write() 不稳定 | 改用剪贴板+Ctrl+V |
+
+## 故障排除
+
+### Q1: 启动卡在"加载模型中"
+FunASR 模型约 900MB，加载需要 10-20 秒，请耐心等待。用 `-v` 参数查看详细日志。
+
+### Q2: 按 F9 没有反应
+确认看到 `启动完成!` 提示后再操作。部分终端需要管理员权限。
+
+### Q3: 识别结果不准确
+- 确保麦克风权限已开启
+- 调整 `silence_duration` 参数
+- 开启降噪：`enable_noise_reduction: true`
+
+### Q4: GPU 未被使用
+需要安装 CUDA 版 PyTorch，CPU 版本无法使用 GPU。参见上方 GPU 加速章节。
+
+### Q5: 中文路径报错
+已自动处理，模型会被复制到临时目录。
+
+## License
 
 MIT License
 
-## 🙏 致谢
+## 致谢
 
 - [FunASR / SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 阿里达摩院语音识别模型
 - [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) — Kaldi 团队 ONNX 推理引擎
 - [ModelScope](https://www.modelscope.cn) — 魔搭社区模型托管
-- [sounddevice](https://python-sounddevice.readthedocs.io/) — 音频录制库
-- [pynput](https://pynput.readthedocs.io/) — 全局热键库

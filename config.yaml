@@ -8,7 +8,7 @@ audio:
   block_size: 1024
   dtype: "int16"
   silence_threshold: 0.01
-  silence_duration: 1.5
+  silence_duration: 3.0
   max_duration: 60
   enable_noise_reduction: true
   noise_profile_frames: 8
@@ -18,6 +18,7 @@ asr:
   funasr:
     model: "d:/qiniuyun/voice-models/SenseVoiceSmall"
     quantize: true
+    device: "auto"
     hotwords_file: "hotwords.txt"
     enable_punctuation: true
     language: "zh"
@@ -66,5 +67,5 @@ polish:
 
 streaming:
   enabled: true
-  interval: 0.5
+  interval: 0.3
   show_partial: true

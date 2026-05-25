@@ -213,10 +213,9 @@ class VoiceEngine:
             if self._state != EngineState.RECORDING:
                 return
 
-            full_wav = self._recorder.get_audio_data()
             pcm_size = self._recorder.get_audio_size()
 
-            if not full_wav or pcm_size <= self._last_pcm_bytes:
+            if pcm_size <= self._last_pcm_bytes:
                 return
 
             new_pcm_bytes = pcm_size - self._last_pcm_bytes
@@ -225,17 +224,30 @@ class VoiceEngine:
             if new_pcm_bytes < min_bytes:
                 return
 
-            wav_header_size = 44
-            new_pcm = full_wav[wav_header_size + self._last_pcm_bytes : wav_header_size + pcm_size]
+            pcm_data, total_pcm = self._recorder.get_incremental_pcm(0)
+            self._last_pcm_bytes = total_pcm
+
+            if not pcm_data:
+                return
 
             import struct
 
-            header = bytearray(full_wav[:wav_header_size])
-            struct.pack_into("<I", header, 4, len(new_pcm) + 36)
-            struct.pack_into("<I", header, 40, len(new_pcm))
-            chunk_wav = bytes(header) + new_pcm
+            header = bytearray(44)
+            header[0:4] = b'RIFF'
+            struct.pack_into("<I", header, 4, len(pcm_data) + 36)
+            header[8:12] = b'WAVE'
+            header[12:16] = b'fmt '
+            struct.pack_into("<I", header, 16, 16)
+            struct.pack_into("<H", header, 20, 1)
+            struct.pack_into("<H", header, 22, self._config.audio.channels)
+            struct.pack_into("<I", header, 24, self._config.audio.sample_rate)
+            struct.pack_into("<I", header, 28, self._config.audio.sample_rate * self._config.audio.channels * 2)
+            struct.pack_into("<H", header, 32, self._config.audio.channels * 2)
+            struct.pack_into("<H", header, 34, 16)
+            header[36:40] = b'data'
+            struct.pack_into("<I", header, 40, len(pcm_data))
 
-            self._last_pcm_bytes = pcm_size
+            chunk_wav = bytes(header) + pcm_data
 
             self._stream_future = _executor.submit(self._sync_recognize, chunk_wav)
             try:
@@ -273,7 +285,8 @@ class VoiceEngine:
 
     def _process_audio(self, audio_data: bytes) -> None:
         try:
-            future = _executor.submit(self._sync_recognize, audio_data)
+            audio_array = self._vad_trim_audio(audio_data)
+            future = _executor.submit(self._sync_recognize, audio_array)
             result_text = future.result(timeout=30)
             processed = self._text_processor.process(result_text)
 
@@ -313,6 +326,34 @@ class VoiceEngine:
             raise RuntimeError("ASR backend not initialized")
 
         return await self._asr.transcribe(audio_data, self._config.audio.sample_rate)
+
+    def _vad_trim_audio(self, audio_data: bytes) -> bytes:
+        try:
+            import io as _io
+
+            import soundfile as sf
+
+            buf = _io.BytesIO(audio_data)
+            data, sr = sf.read(buf, dtype="int16")
+
+            if data.ndim > 1:
+                data = data[:, 0]
+
+            trimmed = self._vad.trim_silence(data, sr)
+
+            if trimmed is data or len(trimmed) == len(data):
+                return audio_data
+
+            out_buf = _io.BytesIO()
+            if trimmed.ndim == 1:
+                out_data = trimmed.reshape(-1, 1)
+            else:
+                out_data = trimmed
+            sf.write(out_buf, out_data, sr, format="WAV", subtype="PCM_16")
+            return out_buf.getvalue()
+        except Exception as e:
+            logger.debug(f"VAD trim failed, using original audio: {e}")
+            return audio_data
 
     def _output_text(self, text: str) -> None:
         mode = self._config.output.mode

@@ -5,7 +5,6 @@ import logging
 import os
 import signal
 import sys
-import threading
 import time
 
 if __name__ == "__main__":
@@ -32,7 +31,7 @@ def main() -> None:
     parser.add_argument("--verbose", "-v", action="store_true", help="显示详细日志")
     parser.add_argument("--no-gui", action="store_true", help="无GUI模式")
     parser.add_argument("--backend", "-b", default=None, help="ASR后端")
-    parser.add_argument("--device", "-d", type=int, default=None, help="GPU设备ID")
+    parser.add_argument("--device", "-d", type=int, default=None, help="GPU设备ID (0=auto检测)")
     parser.add_argument("--no-stream", action="store_true", help="关闭流式识别")
     parser.add_argument("--polish", action="store_true", help="开启AI润色")
     parser.add_argument("--style", default=None, choices=["auto", "formal", "casual", "technical"], help="润色风格")
@@ -59,6 +58,8 @@ def main() -> None:
         config = load_config(args.config)
         if args.backend:
             config.asr.backend = args.backend
+        if args.device is not None:
+            config.asr.funasr.device = f"cuda:{args.device}"
         if args.no_stream:
             config.streaming.enabled = False
         if args.polish:
@@ -73,14 +74,7 @@ def main() -> None:
         traceback.print_exc(file=_real_stderr)
         sys.exit(1)
 
-    features = []
-    if config.streaming.enabled:
-        features.append("流式识别")
-    if config.polish.enabled:
-        features.append(f"AI润色({config.polish.style})")
-    feature_str = (" | " + " · ".join(features)) if features else ""
-
-    print(f"\r  ⏳ 加载模型中 (约需5-10秒，请耐心等待)...", flush=True)
+    print(f"\r  ⏳ 加载模型中...", flush=True)
 
     _interrupted = [False]
     _orig_sigint = signal.getsignal(signal.SIGINT)
@@ -106,70 +100,62 @@ def main() -> None:
     finally:
         signal.signal(signal.SIGINT, _orig_sigint)
 
-    _out(f"\r✅ 启动完成!{feature_str}  (按 F9 开始录音, Ctrl+C 退出)\n")
+    feature_parts = []
+    if config.streaming.enabled:
+        feature_parts.append("流式识别")
+    if config.polish.enabled:
+        feature_parts.append("AI润色")
+    feature_str = " | " + " | ".join(feature_parts) if feature_parts else ""
 
-    spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    si = [0]
-    recording = [False]
-    partial_shown = [False]
-
-    def _write_status():
-        if recording[0]:
-            if partial_shown[0]:
-                pass
-            else:
-                s = spinner[si[0] % len(spinner)]
-                si[0] += 1
-                _out(f"\r  🎤 {s} ...   ")
-        else:
-            _out("\r" + " " * 35 + "\r")
-
-    def on_status(state):
-        recording[0] = state == EngineState.RECORDING
-        if state == EngineState.PROCESSING:
-            partial_shown[0] = False
-        _write_status()
-
-    def on_partial(text):
-        recording[0] = True
-        partial_shown[0] = True
-        _out(f"\r  🎤 {text}   ")
-
-    def on_result(text):
-        recording[0] = False
-        if partial_shown[0]:
-            _out(f"\r{text}\n")
-        else:
-            _write_status()
-            _out(text + "\n")
-        partial_shown[0] = False
-
-    def on_polished(text):
-        _out(f"  ✨ {text}\n")
-
-    def on_error(msg):
-        _write_status()
-        _err("❌ " + msg)
-        partial_shown[0] = False
-
-    engine.set_on_status_change(on_status)
-    engine.set_on_partial(on_partial)
-    engine.set_on_result(on_result)
-    engine.set_on_polished(on_polished)
-    engine.set_on_error(on_error)
-
+    gpu_info = ""
     try:
-        engine.start_hotkey()
-    except Exception as e:
-        _err("❌ 热键启动失败: " + str(e))
-        sys.exit(1)
+        import torch
+        if torch.cuda.is_available():
+            count = torch.cuda.device_count()
+            if count > 0:
+                name = torch.cuda.get_device_name(0)
+                mem = torch.cuda.mem_get_info(0).total / 1024**3
+                gpu_info = f" | GPU ({name}, {mem/1024:.0f}GB)"
+    except Exception:
+        pass
+
+    _out(f"\r启动完成!{feature_str}{gpu_info}  (按 F9 开始录音, Ctrl+C 退出)\n")
+    _last_partial = [""]
+
+    def _on_status(s: EngineState) -> None:
+        if s == EngineState.RECORDING:
+            _last_partial[0] = ""
+            _out("\033[2K\r  录音中...")
+
+    def _on_partial(t: str) -> None:
+        if t == _last_partial[0]:
+            return
+        _last_partial[0] = t
+        _out(f"\033[2K\r  {t}")
+
+    def _on_result(t: str) -> None:
+        _last_partial[0] = ""
+        _out(f"\033[2K\r→ {t}\n")
+
+    def _on_polished(t: str) -> None:
+        _out(f"→ {t}\n")
+
+    def _on_error(e: str) -> None:
+        _err(f"  错误: {e}")
+
+    engine.set_on_status_change(_on_status)
+    engine.set_on_partial(_on_partial)
+    engine.set_on_result(_on_result)
+    engine.set_on_polished(_on_polished)
+    engine.set_on_error(_on_error)
+
+    engine.start_hotkey()
 
     try:
         while True:
-            _write_status()
-            time.sleep(0.08)
+            time.sleep(0.5)
     except KeyboardInterrupt:
-        _out("\n已退出。\n")
+        _out("\r退出语音输入法\n")
     finally:
         engine.stop_hotkey()
 

@@ -62,8 +62,11 @@ class FunASRBackend(ASRBase):
                 model_path = self._resolve_model_path(model_name)
 
             logger.info(f"Loading FunASR model: {model_path}")
+
+            device = self._resolve_device()
             self._model = AutoModel(
                 model=model_path,
+                device=device,
                 disable_update=True,
             )
 
@@ -131,6 +134,21 @@ class FunASRBackend(ASRBase):
         self._punc_model = None
         self._loaded = False
         logger.info("FunASR model unloaded")
+
+    def _resolve_device(self) -> str:
+        device = self._config.device
+        if device == "auto":
+            import torch
+            if torch.cuda.is_available():
+                count = torch.cuda.device_count()
+                if count > 0:
+                    return "cuda:0"
+            logger.warning("CUDA not available, using CPU")
+            return "cpu"
+        elif device.startswith("cuda"):
+            return device
+        else:
+            return "cpu"
 
     async def transcribe(self, audio_data: bytes, sample_rate: int = 16000) -> str:
         if not self._loaded:

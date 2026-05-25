@@ -17,7 +17,7 @@ class AudioConfig:
     block_size: int = 1024
     dtype: str = "int16"
     silence_threshold: float = 0.01
-    silence_duration: float = 1.5
+    silence_duration: float = 3.0
     max_duration: int = 60
     enable_noise_reduction: bool = True
     noise_profile_frames: int = 8
@@ -30,6 +30,7 @@ class FunASRConfig:
     hotwords_file: str = "hotwords.txt"
     enable_punctuation: bool = True
     language: str = "zh"
+    device: str = "auto"
 
 
 @dataclass
@@ -109,7 +110,7 @@ class PolishConfig:
 @dataclass
 class StreamingConfig:
     enabled: bool = True
-    interval: float = 0.5
+    interval: float = 0.3
     show_partial: bool = True
 
 

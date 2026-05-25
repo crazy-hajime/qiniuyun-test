@@ -36,6 +36,8 @@ class AudioRecorder:
         self._on_silence_callback: Callable[[], None] | None = None
         self._on_level_callback: Callable[[float], None] | None = None
         self._noise_reducer: NoiseReducer | None = None
+        self._pcm_offset: int = 0
+        self._pcm_bytes_cache: int = 0
         if self._config.enable_noise_reduction:
             self._noise_reducer = NoiseReducer(self._config)
 
@@ -54,6 +56,8 @@ class AudioRecorder:
             self._is_recording = True
             self._start_time = time.time()
             self._silence_start = None
+            self._pcm_offset = 0
+            self._pcm_bytes_cache = 0
 
         self._stream = _get_sd().InputStream(
             samplerate=self._config.sample_rate,
@@ -89,10 +93,23 @@ class AudioRecorder:
         return self._get_wav_bytes()
 
     def get_audio_size(self) -> int:
-        if not self._buffer:
-            return 0
-        audio = np.concatenate(self._buffer, axis=0)
-        return audio.nbytes
+        return self._pcm_bytes_cache
+
+    def get_incremental_pcm(self, from_offset: int) -> tuple[bytes, int]:
+        with self._lock:
+            if not self._buffer:
+                return b"", self._pcm_bytes_cache
+
+            total_frames = sum(b.shape[0] for b in self._buffer)
+            total_pcm_bytes = total_frames * self._config.channels * 2
+
+            if from_offset >= total_pcm_bytes:
+                return b"", total_pcm_bytes
+
+            audio = np.concatenate(self._buffer, axis=0)
+            start_frame = from_offset // (self._config.channels * 2)
+            pcm = audio[start_frame:].tobytes()
+            return pcm, total_pcm_bytes
 
     def get_duration(self) -> float:
         if not self._is_recording and self._start_time == 0:
@@ -124,6 +141,7 @@ class AudioRecorder:
             if not self._is_recording:
                 return
             self._buffer.append(indata.copy())
+            self._pcm_bytes_cache += indata.nbytes
 
         elapsed = time.time() - self._start_time
 
